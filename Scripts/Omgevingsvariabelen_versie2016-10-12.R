@@ -32,7 +32,7 @@ dbAnalyse <- "../Data/MeetgegevensVBI2/Versie3/VBI_AnalyseDatabank_v2016-08-31.a
 #Externe ../Data
 #---------------------
 
-dbExterneData<-"../Data/Externe../Data/VBIExterneData.accdb"
+dbExterneData<-"../Data/ExterneData/VBIExterneData.accdb"
 
 #---------------------
 #../Databank strata
