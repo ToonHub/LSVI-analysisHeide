@@ -17,6 +17,13 @@ dbHeideEn6510_2016 <- "../Data/MeetgegevensHeide6510/FieldMapData_Heide6510_2016
 dbVBI2 <- "../Data/MeetgegevensVBI2/Versie3/FieldMapDataVal.accdb"
 
 #---------------------
+# GegevensVBI1
+#---------------------
+
+dbVBI1 <- "../Data/MeetgegevensVBI1/bosinv1_2011Val.accdb"
+dbVBI1_veg <- "../Data/MeetgegevensVBI1/Bosveg4Val.mdb"
+
+#---------------------
 # Meetproces
 #---------------------
 
