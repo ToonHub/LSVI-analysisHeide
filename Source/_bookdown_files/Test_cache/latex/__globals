@@ -1,0 +1,64 @@
+unnamed-chunk-2	$	library	opts_chunk
+getDataHabtypes	$	$<-	as.character	c	dbHeideEn6510_2016	getHabtarget	getMeasuredPlotsMHK	left_join	substring
+specifySubtype	$	$<-	==	dbHeideEn6510_2016	getMetaDataMHK_2016	group_by	HabCode	ifelse	left_join	mutate	n	ungroup
+figHabtype	~	<	aes	element_text	facet_wrap	geom_bar	ggplot	HabCode	ifelse	labs	plotHabtypesHeide	theme	Weight
+tabAantallen	$	$<-	%>%	==	arrange	c	full_join	getSampleSize	group_by	HabCode	habsubt	ifelse	is.na	kable	n	nGewenst	plotHabtypesHeide	round	SBZH	select	summarise	T	ungroup
+kaartHabtypeOpmaak	$	@	c	cbind	fortify	get_map	max	min	readOGR	substr
+kaartHabtype	~	aes	coords.x1	coords.x2	facet_wrap	geom_point	ggmap	HabObs	meetnet_df	mymap	theme
+getDataVegOpname	!	%>%	arrange	ClassName	Cover	dbHeideEn6510_2016	filter	getCoverSpeciesMHK	getCoverVeglayersMHK	is.na	kable	select	T	unique
+ontbrekendeWaardenVegOpname	$	>	coverSpecies	group_by	HabCode	IDPlots	is.na	left_join	length	n	paste	plotHabtypesHeide	RangNr	summarise	unique	Vegetatielaag
+figuurVegOpname	~	aantalSoortenPerPlot	aes	Count	facet_grid	geom_point	ggplot	labs	RangNr
+figuurVegOpname2	$<-	<=	AantalPlots	AantalWnm	arrange	Cover	coverSpeciesHeide	desc	filter	group_by	HabCode	inner_join	mutate	n	NameNl	nrow	Occurence	plotHabtypesHeide	rank	rankingOccurence	sum	SumCover	summarise
+figuurVegOpname3	~	aes	facet_wrap	geom_point	ggplot	labs	NameNl	Occurence	reorder	top10PerHab	xlim
+figuurVegOpname4	$	~	aes	facet_wrap	geom_point	ggplot	labs	max	MeanCover	NameNl	reorder	top10PerHab	xlim
+getDataStructuurPlot	Brushwood	Calluna_phase_climax	Calluna_phase_degen	Calluna_phase_devel	Calluna_phase_pioneer	Campylopus_introflexus	dbHeideEn6510_2016	getStructurePlotHeide	Herbs	LowShrublayer	Pioneer_Coryn_Aira	Pioneer_Lichenen	Pioneer_Mos	Pioneer_phase_open_soil	rename	Shrub_and_Treelayer_18m	Sphagnumlayer
+aanpassenStructuurPlot	[<-	is.na
+ontbrekendeWaardenStructuurPlot	$	>	is.na	left_join	length	plotHabtypesHeide
+figuurStructuurPlot	$	~	aes	c	facet_grid	filter	gather	geom_point	ggplot	Korstmoslaag	labs	RangNr	structuurHeide	StructuurVariabele	unique	Verbossing	Waarde
+figuurStructuurPlot2	~	aes	c	facet_grid	filter	geom_point	ggplot	labs	RangNr	structuurHeideLong	StructuurVariabele	Waarde
+figuurStructuurPlot3	!	$	$<-	~	==	aes	facet_grid	filter	geom_point	ggplot	ifelse	is.na	RangNr	StruikheiType	Waarde
+berekeningLSVIVegOpname	!	$	$<-	==	arrange	c	calculateLSVI_structuurplotHeide	calculateLSVI_vegetatieopname	coverSpeciesHeide	coverVeglayersHeide	Criterium	dbHeideEn6510_2016	factor	filter	getStructurePlotHeide	HabCode	IDPlots	ifelse	inbo.groen	inbo.rood	Indicator	is.na	left_join	plotHabtypesHeide	RangNr	rbind.fill	SBZH	select	Waarde	Weight
+tabelIndicatoren	
+verkenningIndPlots	$	$<-	&	~	==	aes	AnalyseVariabele	arrange	BeoordelingTekst	c	colors_beoordeling	coord_flip	Criterium	Drempelwaarde	element_text	facet_grid	facet_wrap	factor	geom_bar	geom_point	ggplot	grid.arrange	gsub	label_wrap_gen	labeller	labs	paste	RangNr	rename	scale_colour_manual	theme	unique	Waarde
+verkenningIndPlots2	$	%>%	.	^	AnalyseVariabele	Beoordeling	Criterium	do	Drempelwaarde	Eenheid	group_by	HabCode	Indicator	indicatoren	Indicatortype	mean	mean_cl_boot	n	round	sum	summarise	var	VersieLSVI	Waarde
+verkenningAVLSVI3	%>%	~	==	aes	c	Drempelwaarde	element_text	facet_wrap	filter	geom_point	ggplot	HabCode	ifelse	inbo.groen	inbo.rood	indicatoren	Indicatortype	label_wrap_gen	labeller	labs	scale_colour_manual	scale_shape_manual	stat_summary	statsAV2	theme	VersieLSVI	Waarde	ylim
+verkenningAVLSVI2	%>%	~	==	aes	c	Drempelwaarde	element_text	facet_wrap	filter	geom_point	ggplot	HabCode	ifelse	inbo.groen	inbo.rood	indicatoren	Indicatortype	label_wrap_gen	labeller	labs	scale_colour_manual	scale_shape_manual	stat_summary	statsAV2	theme	VersieLSVI	Waarde	ylim
+statsInd	^	AnalyseVariabele	Beoordeling	Criterium	Drempelwaarde	Eenheid	group_by	HabCode	Indicator	indicatoren	mean	n	round	sum	summarise	var	VersieLSVI	Waarde
+aggergatiePerIndicator	$	$<-	|	==	>	Beoordeling	Combinatie	Criterium	factor	group_by	gsub	HabCode	IDPlots	ifelse	Indicator	indicatoren	is.na	levels	levels<-	mutate	n	n_distinct	sum	summarise	unique	VersieLSVI
+aggergatiePerIndicator5	%>%	~	==	aes	BeoordelingTekst	colors_beoordeling	coord_flip	element_text	facet_grid	filter	geom_bar	geom_hline	ggplot	Grens	indicatoren_Ind	IndicatorTekst	labs	scale_fill_manual	theme	VersieLSVI
+aggergatiePerIndicatorLSVI2	%>%	~	==	aes	BeoordelingTekst	colors_beoordeling	coord_flip	element_text	facet_grid	filter	geom_bar	geom_hline	ggplot	Grens	indicatoren_Ind	IndicatorTekst	labs	scale_fill_manual	theme	VersieLSVI
+sleutelsoorten	$	$<-	%>%	&	~	==	aes	c	coord_flip	dbHeideEn6510_2016	dbLSVI	facet_wrap	filter	geom_bar	getCoverSpeciesMHK	ggplot	ifelse	inbo.grijsblauw	inbo.munt	inbo.rood	inner_join	labs	left_join	LSVI_versie	NameNl	odbcClose	odbcConnectAccess2007	Omschrijving	plotHabtypes	rename	scale_fill_manual	sqlQuery	substr	theme	WetNaam
+aggergatiePerIndicator2	$	$<-	>	BeoordelingBinair	binom.test	Criterium	group_by	HabCode	ifelse	Indicator	IndicatorTekst	n	round	sum	summarise	ungroup	VersieLSVI
+aggergatiePerIndicator4	%>%	~	==	aes	binom.test_est	binom.test_lc	binom.test_rc	c	coord_flip	element_text	facet_grid	filter	geom_errorbar	geom_hline	geom_point	ggplot	inbo.grijs	inbo.groen	inbo.rood	IndicatorTekst	labs	scale_colour_manual	scale_y_continuous	stats_indicatoren	theme	Uitspraak	VersieLSVI
+aggergatiePerIndicator2LSVI2	%>%	~	==	aes	binom.test_est	binom.test_lc	binom.test_rc	c	coord_flip	element_text	facet_grid	filter	geom_errorbar	geom_hline	geom_point	ggplot	inbo.grijs	inbo.groen	inbo.rood	IndicatorTekst	labs	scale_colour_manual	scale_y_continuous	stats_indicatoren	theme	Uitspraak	VersieLSVI
+aggergatiePerIndicator3	%>%	~	==	aes	binom.test_est	binom.test_lc	binom.test_rc	c	coord_flip	element_text	facet_grid	filter	geom_errorbar	geom_hline	geom_point	ggplot	inbo.grijs	inbo.groen	inbo.rood	Indicator	labs	scale_colour_manual	scale_y_continuous	stats_indicatoren_p0.10	theme	Uitspraak	VersieLSVI
+aggergatiePerIndicator3LSVI2	%>%	~	==	aes	binom.test_est	binom.test_lc	binom.test_rc	c	coord_flip	element_text	facet_grid	filter	geom_errorbar	geom_hline	geom_point	ggplot	inbo.grijs	inbo.groen	inbo.rood	Indicator	labs	scale_colour_manual	scale_y_continuous	stats_indicatoren_p0.10	theme	Uitspraak	VersieLSVI
+HR-rapportage	$	$<-	%>%	&	<	==	>=	AandeelOngunstig	AandeelUnknown	AantalHoogOngunstig	AantalHoogUnknown	Belang	Beoordeling	BeoordelingTotaal	binom.test_lc	binom.test_rc	Bron	c	Criterium	factor	filter	full_join	group_by	gsub	HabCode	ifelse	Indicator	is.na	left_join	levels	levels<-	Meetnet habitatkwaliteit	mutate	n	Rapportage2013	rbind.fill	read.csv2	rename	round	select	spread	stats_indicatoren	sum	summarise	tolower	Uitspraak	ungroup	unique	VersieLSVI
+HRrapportage2013	%>%	::	AandeelOngunstig	AantalHoogOngunstig	Beoordeling	HabCode	kable	rapportage2013_overzicht	rename
+ver	!	%>%	~	AandeelOngunstig	aes	binom.test_lc	binom.test_rc	Bron	c	coord_flip	element_text	facet_grid	filter	geom_errorbar	geom_hline	geom_point	ggplot	guide_legend	guides	inbo.grijs	inbo.groen	inbo.rood	IndicatorTekst	is.na	labs	scale_colour_manual	scale_y_continuous	theme	Uitspraak	vergelijking
+ver2	!	%>%	==	add_header_above	Bron	c	collapse_rows	column_spec	filter	group_by	HabCode	Indicator	is.na	kable	Meetnet habitatkwaliteit	Rapportage2013	select	spread	sum	summarise	T	Uitspraak	vergelijking
+ver3	%>%	AandeelOngunstig	AandeelUnknown	AantalHoogOngunstig	AantalHoogUnknown	add_header_above	BeoordelingMax	BeoordelingMin	c	column_spec	HabCode	kable	meetnetHab_overzicht	rename	T
+combinatieStat	!=	%>%	==	AandeelOngunstig	AnalyseVariabele	binom.test_lc	binom.test_rc	c	Criterium	Drempelw	Drempelwaarde	Eenheid	filter	HabCode	ifelse	Indicator	Indicatortype	left_join	mutate	paste	round	select	stats_indicatoren	statsAV2	ungroup	VersieLSVI	y	ymax	ymin
+verkenningAV2310	%>%	==	c	collapse_rows	column_spec	filter	HabCode	kable	kable_styling	overzicht_indicatoren	select	T	VersieLSVI
+verkenningAV2310LSVI2	%>%	==	c	collapse_rows	column_spec	filter	HabCode	kable	kable_styling	overzicht_indicatoren	select	T	VersieLSVI
+figuurAV2310	%>%	==	filter	indicatoren	plot_indicatoren	VersieLSVI
+figuurAV2310LSVI2	%>%	==	filter	indicatoren	plot_indicatoren	VersieLSVI
+verkenningAV2330bu	%>%	==	c	collapse_rows	column_spec	filter	HabCode	kable	kable_styling	overzicht_indicatoren	select	T	VersieLSVI
+verkenningAV2330buLSVI2	%>%	==	c	collapse_rows	column_spec	filter	HabCode	kable	kable_styling	overzicht_indicatoren	select	T	VersieLSVI
+figuurAV233-bu	%>%	==	filter	indicatoren	plot_indicatoren	VersieLSVI
+figuurAV2330buLSVI2	%>%	==	filter	indicatoren	plot_indicatoren	VersieLSVI
+verkenningAV4010	%>%	==	c	collapse_rows	column_spec	filter	HabCode	kable	kable_styling	overzicht_indicatoren	select	T	VersieLSVI
+verkenningAV4010LSVI2	%>%	==	c	collapse_rows	column_spec	filter	HabCode	kable	kable_styling	overzicht_indicatoren	select	T	VersieLSVI
+figuurAV4010	%>%	==	filter	indicatoren	plot_indicatoren	VersieLSVI
+figuurAV4010LSVI2	%>%	==	filter	indicatoren	plot_indicatoren	VersieLSVI
+verkenningAV4030	%>%	==	c	collapse_rows	column_spec	filter	HabCode	kable	kable_styling	overzicht_indicatoren	select	T	VersieLSVI
+verkenningAV4030LSVI2	%>%	==	c	collapse_rows	column_spec	filter	HabCode	kable	kable_styling	overzicht_indicatoren	select	T	VersieLSVI
+figuurAV4030	%>%	==	filter	indicatoren	plot_indicatoren	VersieLSVI
+figuurAV4030LSVI2	%>%	==	filter	indicatoren	plot_indicatoren	VersieLSVI
+stats2310LSVI2	%>%	AnVar	c	collapse_rows	column_spec	Eenh	Gem	Gem LC	Gem UC	HabCode	kable	kable_styling	select	T	tableStats
+stats2330buLSVI2	%>%	==	filter	HabCode	kable	select	tableStats
+stats4010LSVI2	%>%	==	filter	HabCode	kable	select	tableStats
+stats4030LSVI2	%>%	==	filter	HabCode	kable	select	tableStats
+HRrapportage	%>%	::	AandeelOngunstig	AantalHoogOngunstig	Beoordeling	column_spec	HabCode	kable	rapportage2013_overzicht	rename	T
+statsAVLSVI2	%>%	AnVar	c	collapse_rows	column_spec	Eenh	Gem	Gem LC	Gem UC	HabCode	kable	kable_styling	select	T	tableStats
+statsIndLSVI2	%>%	AOng	AOng LC	AOng UC	c	collapse_rows	column_spec	Criterium	HabCode	Indicator	kable	kable_styling	select	T	tableStats	unique

@@ -1,0 +1,15 @@
+book_filename: "AnalyseHabitatkwaliteitHeide.Rmd"
+output_dir: "../Output"
+language:
+  label:
+    fig:    'Figuur '
+    tab:    'Tabel '
+    eq:     'Vergelijking '
+    thm:    'Theorema '
+    lem:    'Lemma '
+    def:    'Definitie '
+    cor:    'Gevolgtrekking '
+    prp:    'Bewering '
+    ex:     'Voorbeeld '
+    proof:  'Bewijs. '
+    remark: 'Opmerking. '
