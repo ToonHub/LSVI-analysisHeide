@@ -809,6 +809,144 @@ getTreesA3A4VBI2 <- function (db = dbVBI2, dbMeetproc = dbMeetproces, plotIDs = 
 
 #############################################################################################################
 
+#'Haal gegevens over de bomen uit de A3A4 - plots van de eerste Vlaamse bosinventarisatie
+#'
+#'Deze functie haalt meetresultaten en soortgegevens over bomen uit de A3- en de A4-plots van #'de tweede Vlaamse bosinventarisatie.Ontbrekende hoogtes worden vervangen door de mediaan van #'de boomhoogtes binnen een plot.Bomen met ontbrekende waarden voor 'status' beschouwen we als #'levende bomen; Bomen met ontbrekende waarden voor 'individueel/hakhout' beschouwen we als een #'individuele stam.
+#'Op basis van gegevens uit de databank 'VBImeetproces' wordt elke boom aan een segment binnen #'een plot toegekend en wordt aan elk segment de oppervlakte toegevoegd van het deel van de A4 #'en de A3 plot dat binnen dit segment valt. Op basis van deze oppervlaktes worden de
+#'expansiecoefficienten bepaald.
+#'
+#'@param db Databank met meetgegevens (defaultwaarde = dbVBI2; te definiëren in 'Omgeveingsvariabelen.R')
+#'@param dbMeetproc Databank met gegevens over meetproces (defaultwaarde = dbMeetproces; te definiëren in 'Omgeveingsvariabelen.R')
+#'@param plotIDs ID's van plots waarvoor gegevens worden opgehaald (default: alle gegevens uit gespecifieerde databank)
+#'
+#'
+#'@return dataframe met velden DataSet, IDPlots, IDSegments, ID (ID voor boom),
+#' AreaA4_m2 en AreaA3_m2 (per segment),DBH_mm, Perimeter_cm, Height_m,
+#' IDTree (ID voor boomsoort), Alive(1=levend, 0=dood), NameNl,
+#' IntactTreeCode (10 = intacte boom, 20 = niet-intacte boom),
+#' Coppice_IndividualCode (10=individuele stam, 20= hakhout), NameNl,
+#' IsAutochtoon (1=ja, 0=nee), Genus en Species.
+#'
+#'@export
+#'
+
+getTreesA3A4VBI1 <- function (db = dbVBI2, dbMeetproc = dbMeetproces, plotIDs = NULL){
+
+
+  connectieMetadata <- odbcConnectAccess2007(dbMeetproc)
+
+  #tabel met plotgewichten en segmentgewichten en oppervlaktes van A2, A3 en A4 plots
+  plotWeights<-sqlFetch(connectieMetadata,"tblPlotWeights")
+
+  #tabel met er boom de ID van het segment waarbinnen de boom valt
+  treesSegmentID<-sqlFetch(connectieMetadata,"tblTreesSegmentID")
+
+  odbcClose(connectieMetadata)
+
+  query_trees<-"
+  SELECT Trees_2eBosinv.IDPlots,
+  Trees_2eBosinv.ID,
+  Trees_2eBosinv.Perimeter_cm,
+  Trees_2eBosinv.DBH_mm,
+  Trees_2eBosinv.Height_m,
+  Trees_2eBosinv.Species,
+  qTreeSpecies.Value1,
+  Trees_2eBosinv.Status_tree,
+  qStatusTree.Value1,
+  Trees_2eBosinv.CodeCoppice_Individual,
+  qCoppice_Individual.Value1,
+  Trees_2eBosinv.IntactTree,
+  qIntactTree.Value1
+  FROM (((Trees_2eBosinv LEFT JOIN qTreeSpecies ON Trees_2eBosinv.Species = qTreeSpecies.ID)
+  LEFT JOIN qStatusTree ON Trees_2eBosinv.Status_tree = qStatusTree.ID)
+  LEFT JOIN qCoppice_Individual ON Trees_2eBosinv.CodeCoppice_Individual = qCoppice_Individual.ID)
+  LEFT JOIN qIntactTree ON Trees_2eBosinv.IntactTree = qIntactTree.ID;
+  "
+
+  connectieVBI2 <- odbcConnectAccess2007(db)
+  treesA3A4Orig <- sqlQuery(connectieVBI2, query_trees, stringsAsFactors = TRUE)
+  odbcClose(connectieVBI2)
+
+  treesA3A4 <- plyr::rename(treesA3A4Orig,c(Species="IDTreeSp",
+                                    Value1="Species",
+                                    Status_tree="StatusTreeCode",
+                                    Value1.1="StatusTree",
+                                    CodeCoppice_Individual="Coppice_IndividualCode",
+                                    Value1.2="Coppice_Individual",
+                                    IntactTree="IntactTreeCode",
+                                    Value1.3="IntactTree"))
+
+  #Bomen met ID=0 verwijderen
+  treesA3A4 <- treesA3A4[treesA3A4$ID>0,]
+
+
+  treesA3A4 <- merge(treesA3A4,treesSegmentID,by=c("IDPlots","ID"),all.x=TRUE)
+  treesA3A4[is.na(treesA3A4$IDSegments),]$IDSegments<-1
+
+  # ontbrekende waarde voor status --> we veronderstemmen levende boom; ontbrekende waarde voor hakhout-individueel --> we veronderstellen individuele boom; ontbrekende waarde voor intact/niet-intacte boom --> we veronderstellen een intacte boom
+
+  treesA3A4[is.na(treesA3A4$StatusTreeCode),]$StatusTreeCode <- 1
+  treesA3A4[is.na(treesA3A4$StatusTree),]$StatusTree<- "levend"
+
+  treesA3A4[is.na(treesA3A4$Coppice_IndividualCode),]$Coppice_IndividualCode<-10
+  treesA3A4[is.na(treesA3A4$Coppice_Individual),]$Coppice_Individual<- "Individuele boom"
+
+  treesA3A4[is.na(treesA3A4$IntactTreeCode),]$IntactTreeCode<-10
+  treesA3A4[is.na(treesA3A4$IntactTree),]$IntactTree<- "Intacte boom"
+
+  #### Bijschatten ontbrekende hoogtes: mediaan van boomhoogte per plot
+
+  plots_medianHeight<-ddply(treesA3A4,.(IDPlots,Periode),summarise,
+                            medianHeight=median(Height_m,na.rm=TRUE))
+
+
+  #Zet de bomen waarvoor geen Height_m gekend gelijka aan de mediaanhoogte van de bomen in het plot
+  treesA3A4<-merge(treesA3A4,plots_medianHeight,by=c("IDPlots","Periode"), all.x=TRUE) #gewijzigd naar all.x
+  treesA3A4$Height_m<-ifelse(is.na(treesA3A4$Height_m),treesA3A4$medianHeight,treesA3A4$Height_m)
+
+  treesA3A4$Height_m <- ifelse(is.na(treesA3A4$Height_m), mean(treesA3A4$Height_m,na.rm=TRUE),treesA3A4$Height_m)
+
+  #enkel bomen selecteren die in segmenten aangeduid als bos vallen
+  #'plotWeightsVBI2' bevat, per segment met bos, de oppervlaktes van het deel van de A3 en A4 plot dat in het segment valt. 'treesA3A4' bevat ook enkele bomen die foutief gelocaliseerd zijn in segmenten zonder bos. Via een inner join, verwijderen we deze foutief gelocaliseerde bomen.
+
+  treesA3A4 <- merge(treesA3A4,plotWeights,by=c("IDPlots","IDSegments"))
+
+  treesA3A4$DataSet <- "VBI2"
+
+  treesA3A4$Alive <- treesA3A4$StatusTreeCode==1
+
+  treesA3A4 <- treesA3A4[!is.na(treesA3A4$IDPlots),c("DataSet","IDPlots","IDSegments","ID","AreaA4_m2","AreaA3_m2","Perimeter_cm","DBH_mm","Height_m","IDTreeSp","Alive","IntactTreeCode","Coppice_IndividualCode")]
+
+
+  #extra informatie over boomsoorten toevoegen
+
+  connectieExterneData <- odbcConnectAccess2007(dbExterneData)
+
+    treeList <- sqlFetch(connectieExterneData,"tblTreeSpeciesCharacteristics")
+
+  odbcClose(connectieExterneData)
+
+  treesA3A4 <- merge(treesA3A4,treeList,by="IDTreeSp",all.x=TRUE)
+
+
+  if (is.null(plotIDs)){
+
+    result <- treesA3A4
+
+  } else {
+
+    result <- treesA3A4[treesA3A4$IDPlots %in% plotIDs,]
+
+  }
+
+  return(result)
+
+}
+
+#############################################################################################################
+
+
+
 ### Haal gegevens op van A2-bomen uit VBI2-databank
 
 getTreesA2VBI2 <- function (db =  dbVBI2, plotIDs = NULL){
