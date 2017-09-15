@@ -229,8 +229,74 @@ getMeasuredPlotsVBI2 <- function(db = dbVBI2){
 }
 
 
+####################################################
+
+getCoverSpeciesVBI1 <- function (db =  dbVBI1_veg, plotIDs = NULL){
+
+query_veglayerVBI1 <-"
+SELECT Opnamen.Opnamenummer
+, Opnamen.[Belgisch volgnummer]
+, Opnamen.Vegetatielaag
+, Opnamen.Abund_Transf
+FROM Opnamen
+;
+"
+connectieVBI1 <- odbcConnectAccess2007(db) #dit is een accdb file
+
+veglayerVBI1Orig <- sqlQuery(connectieVBI1, query_veglayerVBI1, stringsAsFactors = TRUE)
+
+odbcClose(connectieVBI1)
+
+veglayerVBI1Orig <- plyr::rename(veglayerVBI1Orig,c(Opnamenummer="IDPlots","Belgisch volgnummer"="IDSpVBI1",Abund_Transf="Coverage")) #
+
+veglayerVBI1 <- veglayerVBI1Orig
 
 
+
+ # externe data
+
+  connectieExterneData <- odbcConnectAccess2007(dbExterneData) #dit is een accdb file
+  treeList <- sqlFetch(connectieExterneData,"tblTreeSpeciesCharacteristics",stringsAsFactors = TRUE)
+  treeListExtra <- sqlFetch(connectieExterneData,"tblSpeciesTreelayerCharacteristics",stringsAsFactors = TRUE)
+  speciesListComb<-sqlFetch(connectieExterneData, "tblspeciesListComb", stringsAsFactors = TRUE)
+  odbcClose(connectieExterneData)
+
+  veglayers <- merge(veglayerVBI1,speciesListComb,by="IDSpVBI1",all.x=TRUE)
+
+  scaleBB <- data.frame(BBID = c(1:9), Cover = c(0.25,1,2.25,4,8.75,18.75,37.5,62.5,87.5))
+
+  veglayers$Scale <- "Braun-Blanquet"
+
+  veglayers<-merge(veglayers,scaleBB,by.x="Coverage",by.y="BBID",all.x=TRUE)
+
+  veglayers <- veglayers[order(veglayers$IDPlots),]
+
+  veglayers$Tree <- (veglayers$NameNl %in% treeList$NameNl) | (veglayers$NameNl %in% treeListExtra$NameNl[treeListExtra$Tree==1])
+
+  #veglayers[veglayers$NameNl == "_ANDERE SOORT",]$Tree <- FALSE
+
+  veglayers <- veglayers[,!names(veglayers) %in% c("Coverage","IDSpVBI2", "IDSpVBI1")]
+
+  veglayers$Vegetatielaag <- ifelse(veglayers$Vegetatielaag == "k", "kruidlaag",
+                            ifelse(veglayers$Vegetatielaag == "s", "struiklaag",
+                                   ifelse(veglayers$Vegetatielaag == "m", "moslaag",
+                                          ifelse(veglayers$Vegetatielaag == "b", "boomlaag",NA))))
+
+
+
+  if (is.null(plotIDs)){
+
+    result <- veglayers
+
+  } else {
+
+    result <- veglayers[veglayers$IDPlots %in% plotIDs,]
+
+  }
+
+  return(result)
+
+}
 
 
 ##############################################################
@@ -523,7 +589,7 @@ getCoverVeglayersVBI2 <- function (db =  dbVBI2, plotIDs = NULL) {
 
   veglayer <- veglayer[,c("IDPlots","CoverHerblayer","CoverMosslayer","CoverShrublayer","CoverTreelayer")]
 
-  veglayer$CoverTreeAndShrublayer <- 1 - (1 - veglayer$CoverTreelayer) * (1 - veglayer$CoverShrublayer)
+  veglayer$CoverTreeAndShrublayer <- (1 - (1 - veglayer$CoverTreelayer/100) * (1 - veglayer$CoverShrublayer/100))*100
 
   if (is.null(plotIDs)){
 
@@ -541,6 +607,55 @@ getCoverVeglayersVBI2 <- function (db =  dbVBI2, plotIDs = NULL) {
 }
 
 ###############################################################################################################################
+
+################################################################################################
+
+### Haal bedekking van de afzonderlijke vegetatielagen in 16x16m proefvlak uit VBI1 databank
+
+getCoverVeglayersVBI1 <- function (db =  dbVBI1_veg, plotIDs = NULL) {
+
+  query_veglayers <- "SELECT
+    KOP.Opnamenummer,
+    KOP.[Bedekking kruidlaag],
+    KOP.[Bedekking moslaag],
+    KOP.[Bedekking struiklaag],
+    KOP.[Bedekking boomlaag]
+    FROM KOP;"
+
+  connectieVBI1 <- odbcConnectAccess2007(db) #dit is een mdb file
+
+  veglayerOrig <- sqlQuery(connectieVBI1, query_veglayers, stringsAsFactors = TRUE)
+
+  odbcClose(connectieVBI1)
+
+  veglayer <- veglayerOrig %>%
+    dplyr::rename(IDPlots = Opnamenummer,
+                  CoverHerblayer = "Bedekking kruidlaag",
+                  CoverMosslayer = "Bedekking moslaag",
+                  CoverShrublayer = "Bedekking struiklaag",
+                  CoverTreelayer = "Bedekking boomlaag")
+
+  veglayer$CoverTreeAndShrublayer <- (1 - (1 - veglayer$CoverTreelayer/100) * (1 - veglayer$CoverShrublayer/100))*100
+
+  if (is.null(plotIDs)){
+
+    result <- veglayer
+
+  } else {
+
+    result <- veglayer[veglayer$IDPlots %in% plotIDs,]
+
+  }
+
+  return(result)
+
+}
+
+###############################################################################################################################
+
+
+
+
 # db <- dbHeideEn6510_2016
 
 getCoverVeglayersMHK <- function(db = dbHeideEn6510_2014_2015, plotIDs = NULL){
@@ -811,9 +926,8 @@ getTreesA3A4VBI2 <- function (db = dbVBI2, dbMeetproc = dbMeetproces, plotIDs = 
 
 #'Haal gegevens over de bomen uit de A3A4 - plots van de eerste Vlaamse bosinventarisatie
 #'
-#'Deze functie haalt meetresultaten en soortgegevens over bomen uit de A3- en de A4-plots van #'de tweede Vlaamse bosinventarisatie.Ontbrekende hoogtes worden vervangen door de mediaan van #'de boomhoogtes binnen een plot.Bomen met ontbrekende waarden voor 'status' beschouwen we als #'levende bomen; Bomen met ontbrekende waarden voor 'individueel/hakhout' beschouwen we als een #'individuele stam.
-#'Op basis van gegevens uit de databank 'VBImeetproces' wordt elke boom aan een segment binnen #'een plot toegekend en wordt aan elk segment de oppervlakte toegevoegd van het deel van de A4 #'en de A3 plot dat binnen dit segment valt. Op basis van deze oppervlaktes worden de
-#'expansiecoefficienten bepaald.
+#'Deze functie haalt meetresultaten en soortgegevens over bomen uit de A3- en de A4-plots van #'de eerst Vlaamse bosinventarisatie.Ontbrekende hoogtes worden vervangen door de mediaan van #'de boomhoogtes binnen een plot.Bomen met ontbrekende waarden voor 'status' beschouwen we als #'levende bomen;
+
 #'
 #'@param db Databank met meetgegevens (defaultwaarde = dbVBI2; te definiëren in 'Omgeveingsvariabelen.R')
 #'@param dbMeetproc Databank met gegevens over meetproces (defaultwaarde = dbMeetproces; te definiëren in 'Omgeveingsvariabelen.R')
@@ -830,88 +944,74 @@ getTreesA3A4VBI2 <- function (db = dbVBI2, dbMeetproc = dbMeetproces, plotIDs = 
 #'@export
 #'
 
-getTreesA3A4VBI1 <- function (db = dbVBI2, dbMeetproc = dbMeetproces, plotIDs = NULL){
-
-
-  connectieMetadata <- odbcConnectAccess2007(dbMeetproc)
-
-  #tabel met plotgewichten en segmentgewichten en oppervlaktes van A2, A3 en A4 plots
-  plotWeights<-sqlFetch(connectieMetadata,"tblPlotWeights")
-
-  #tabel met er boom de ID van het segment waarbinnen de boom valt
-  treesSegmentID<-sqlFetch(connectieMetadata,"tblTreesSegmentID")
-
-  odbcClose(connectieMetadata)
+getTreesA3A4VBI1 <- function (db = dbVBI1, dbMeetproc = dbMeetproces, plotIDs = NULL){
 
   query_trees<-"
-  SELECT Trees_2eBosinv.IDPlots,
-  Trees_2eBosinv.ID,
-  Trees_2eBosinv.Perimeter_cm,
-  Trees_2eBosinv.DBH_mm,
-  Trees_2eBosinv.Height_m,
-  Trees_2eBosinv.Species,
-  qTreeSpecies.Value1,
-  Trees_2eBosinv.Status_tree,
-  qStatusTree.Value1,
-  Trees_2eBosinv.CodeCoppice_Individual,
-  qCoppice_Individual.Value1,
-  Trees_2eBosinv.IntactTree,
-  qIntactTree.Value1
-  FROM (((Trees_2eBosinv LEFT JOIN qTreeSpecies ON Trees_2eBosinv.Species = qTreeSpecies.ID)
-  LEFT JOIN qStatusTree ON Trees_2eBosinv.Status_tree = qStatusTree.ID)
-  LEFT JOIN qCoppice_Individual ON Trees_2eBosinv.CodeCoppice_Individual = qCoppice_Individual.ID)
-  LEFT JOIN qIntactTree ON Trees_2eBosinv.IntactTree = qIntactTree.ID;
-  "
+SELECT
+tblA34.PLOTNR
+, tblA34.BOOMNR
+, tblA34.BOOMSOORT
+, tblBoomsoorten.NAAM,tblA34.AFSTAND
+, tblA34.OMTREK
+, tblA34.HOOGTE
+, tblA34.DOOD
+FROM tblBoomsoorten
+RIGHT JOIN tblA34
+ON tblBoomsoorten.BOOMSOORTID = tblA34.BOOMSOORT
+;"
 
-  connectieVBI2 <- odbcConnectAccess2007(db)
-  treesA3A4Orig <- sqlQuery(connectieVBI2, query_trees, stringsAsFactors = TRUE)
-  odbcClose(connectieVBI2)
+  connectieVBI1<- odbcConnectAccess2007(db)
+  treesA3A4Orig <- sqlQuery(connectieVBI1, query_trees)
+  convC130 <- sqlFetch(connectieVBI1,"tblCoefOmzetOmtrek")
+  odbcClose(connectieVBI1)
 
-  treesA3A4 <- plyr::rename(treesA3A4Orig,c(Species="IDTreeSp",
-                                    Value1="Species",
-                                    Status_tree="StatusTreeCode",
-                                    Value1.1="StatusTree",
-                                    CodeCoppice_Individual="Coppice_IndividualCode",
-                                    Value1.2="Coppice_Individual",
-                                    IntactTree="IntactTreeCode",
-                                    Value1.3="IntactTree"))
+  treesA3A4 <- plyr::rename(treesA3A4Orig,c(PLOTNR="IDPlots",
+                                  BOOMNR="ID",
+                                  BOOMSOORT="IDTreeSp",
+                                  NAAM="Species",
+                                  OMTREK="Perimeter_cm",
+                                  HOOGTE="Height_m",
+                                  DOOD="StatusTreeCode"
+  ))
 
-  #Bomen met ID=0 verwijderen
-  treesA3A4 <- treesA3A4[treesA3A4$ID>0,]
+  #codering dood hout gelijk stellen aan VBI2
+  treesA3A4$StatusTreeCode <- treesA3A4$StatusTreeCode+1
 
+  #conversie omtrek op 1,5m naar 1,3m
+  convC130 <- rename(convC130,c(BOOMSOORTID="IDTreeSp"))
+  treesA3A4 <- merge(treesA3A4,convC130,by="IDTreeSp",all.x=TRUE)
+  treesA3A4$C130 <- treesA3A4$A+treesA3A4$B * treesA3A4$Perimeter_cm
+  treesA3A4$Perimeter_cm <- treesA3A4$C130
 
-  treesA3A4 <- merge(treesA3A4,treesSegmentID,by=c("IDPlots","ID"),all.x=TRUE)
-  treesA3A4[is.na(treesA3A4$IDSegments),]$IDSegments<-1
+  ### Bijschatten van hoogtes = 0 (slechts 4 bomen; normaal alle hoogtes opgemeten): mediaan van boomhoogte per plot
+  # enkel levende bomen
 
-  # ontbrekende waarde voor status --> we veronderstemmen levende boom; ontbrekende waarde voor hakhout-individueel --> we veronderstellen individuele boom; ontbrekende waarde voor intact/niet-intacte boom --> we veronderstellen een intacte boom
+  plots_medianHeight <- treesA3A4 %>%
+    filter(StatusTreeCode == 1) %>%
+    dplyr::group_by(IDPlots) %>%
+    dplyr::summarise(medianHeight = median(Height_m,na.rm=TRUE) )
 
-  treesA3A4[is.na(treesA3A4$StatusTreeCode),]$StatusTreeCode <- 1
-  treesA3A4[is.na(treesA3A4$StatusTree),]$StatusTree<- "levend"
+  treesA3A4 <- left_join(treesA3A4, plots_medianHeight, by="IDPlots")
 
-  treesA3A4[is.na(treesA3A4$Coppice_IndividualCode),]$Coppice_IndividualCode<-10
-  treesA3A4[is.na(treesA3A4$Coppice_Individual),]$Coppice_Individual<- "Individuele boom"
+  # !! enkel voor de levende bomen met hoogte = 0 (alle dode bomen standaard hoogte = 0)
+  treesA3A4$Height_m <- ifelse((treesA3A4$Height_m == 0 & treesA3A4$StatusTreeCode == 1),treesA3A4$medianHeight,treesA3A4$Height_m)
+  # (c)A: blijkbaar ook 13 NA's voor hoogte (+ als na controle blijkt dat een boom levend is, dan is de hoogte in "bosinv1_2011Val.accdb" plots niet meer "0", maar "NA")
+  treesA3A4$Height_m <- ifelse((is.na (treesA3A4$Height_m) & treesA3A4$StatusTreeCode == 1),treesA3A4$medianHeight,treesA3A4$Height_m)
 
-  treesA3A4[is.na(treesA3A4$IntactTreeCode),]$IntactTreeCode<-10
-  treesA3A4[is.na(treesA3A4$IntactTree),]$IntactTree<- "Intacte boom"
+  ###ontberekende velden
 
-  #### Bijschatten ontbrekende hoogtes: mediaan van boomhoogte per plot
+  treesA3A4$IntactTreeCode <- 10
 
-  plots_medianHeight<-ddply(treesA3A4,.(IDPlots,Periode),summarise,
-                            medianHeight=median(Height_m,na.rm=TRUE))
+  #inA3A4 cirkel wordt geen hakhout opgemeten; enkel individuele bomen (code = 10)
+  treesA3A4$Coppice_IndividualCode <- 10
 
+  #plots worden niet opgesplitst in VBI1
+  treesA3A4$IDSegments <- 1
+  treesA3A4$AreaA4_m2 <- pi * 18 * 18
+  treesA3A4$AreaA3_m2 <- pi * 9 * 9
+  treesA3A4$DBH_mm <- treesA3A4$Perimeter_cm*10/pi
 
-  #Zet de bomen waarvoor geen Height_m gekend gelijka aan de mediaanhoogte van de bomen in het plot
-  treesA3A4<-merge(treesA3A4,plots_medianHeight,by=c("IDPlots","Periode"), all.x=TRUE) #gewijzigd naar all.x
-  treesA3A4$Height_m<-ifelse(is.na(treesA3A4$Height_m),treesA3A4$medianHeight,treesA3A4$Height_m)
-
-  treesA3A4$Height_m <- ifelse(is.na(treesA3A4$Height_m), mean(treesA3A4$Height_m,na.rm=TRUE),treesA3A4$Height_m)
-
-  #enkel bomen selecteren die in segmenten aangeduid als bos vallen
-  #'plotWeightsVBI2' bevat, per segment met bos, de oppervlaktes van het deel van de A3 en A4 plot dat in het segment valt. 'treesA3A4' bevat ook enkele bomen die foutief gelocaliseerd zijn in segmenten zonder bos. Via een inner join, verwijderen we deze foutief gelocaliseerde bomen.
-
-  treesA3A4 <- merge(treesA3A4,plotWeights,by=c("IDPlots","IDSegments"))
-
-  treesA3A4$DataSet <- "VBI2"
+  treesA3A4$DataSet <- "VBI1"
 
   treesA3A4$Alive <- treesA3A4$StatusTreeCode==1
 
@@ -1039,6 +1139,141 @@ SELECT
 
 }
 
+##############################################################################################
+
+### Haal gegevens op van hakhoutspillen uit VBI1 databank
+
+
+getShootsVBI1 <- function(db =  dbVBI1, plotIDs = NULL){
+
+query_treesA2VBI1 <-"
+  SELECT
+  tblA2.PLOTNR
+  , tblA2.BOOMNR
+  , tblA2.IDTree
+  , tblA2.AZIMUT
+  , tblA2.AFSTAND
+  , tblA2.BOOMSOORT
+  , tblBoomsoorten.NAAM
+  , tblA2.HOOGHOUT
+  , tblA2.OMTREK
+  , tblA2.DOOD
+  FROM tblBoomsoorten
+  RIGHT JOIN tblA2
+  ON tblBoomsoorten.BOOMSOORTID = tblA2.BOOMSOORT
+  ;"
+
+  connectieVBI1 <- odbcConnectAccess2007(dbVBI1) #dit is een accdb file
+
+  treesA2VBI1Orig <- sqlQuery(connectieVBI1, query_treesA2VBI1, stringsAsFactors = TRUE)
+  convC130 <- sqlFetch(connectieVBI1,"tblCoefOmzetOmtrek")
+
+  odbcClose(connectieVBI1)
+
+  treesA2VBI1<-plyr::rename(treesA2VBI1Orig,c(PLOTNR="IDPlots",
+                                      IDTree="ID",    # ipv BOOMNR
+                                      BOOMSOORT="IDTreeSp",
+                                      NAAM="Species",
+                                      OMTREK="Perimeter_cm",
+                                      DOOD="StatusTreeCode"))
+
+  shootsVBI1 <- treesA2VBI1[treesA2VBI1$HOOGHOUT == 0 & treesA2VBI1$Perimeter_cm > 0,]
+  shootsVBI1$Alive <- shootsVBI1$StatusTreeCode == 0
+
+  #conversie omtrek op 1,5m naar 1,3m
+  convC130 <- rename(convC130,c(BOOMSOORTID="IDTreeSp"))
+  shootsVBI1 <- merge(shootsVBI1,convC130,by="IDTreeSp",all.x=TRUE)
+  shootsVBI1$C130 <- shootsVBI1$A + shootsVBI1$B * shootsVBI1$Perimeter_cm
+  shootsVBI1$Perimeter_cm <- shootsVBI1$C130
+
+
+
+    #extra informatie over boomsoorten toevoegen
+
+  connectieExterneData <- odbcConnectAccess2007(dbExterneData)
+
+    treeList <- sqlFetch(connectieExterneData,"tblTreeSpeciesCharacteristics")
+
+  odbcClose(connectieExterneData)
+
+  shootsVBI1 <- merge(shootsVBI1,treeList,by="IDTreeSp",all.x=TRUE)
+
+
+
+  if (is.null(plotIDs)){
+
+    result <- shootsVBI1
+
+  } else {
+
+    result <- shootsVBI1[shootsVBI1$IDPlots %in% plotIDs,]
+
+  }
+
+  return(result)
+
+
+}
+
+
+### Haal gegevens A2-bomen (zonder hakhout) uit VBI1 databank
+
+
+getTreesA2VBI1 <- function(db =  dbVBI1, plotIDs = NULL){
+
+query_treesA2VBI1 <-"
+  SELECT
+  tblA2.PLOTNR
+  , tblA2.BOOMNR
+  , tblA2.IDTree
+  , tblA2.AZIMUT
+  , tblA2.AFSTAND
+  , tblA2.BOOMSOORT
+  , tblBoomsoorten.NAAM
+  , tblA2.HOOGHOUT
+  , tblA2.OMTREK
+  , tblA2.DOOD
+  FROM tblBoomsoorten
+  RIGHT JOIN tblA2
+  ON tblBoomsoorten.BOOMSOORTID = tblA2.BOOMSOORT
+  ;"
+
+  connectieVBI1 <- odbcConnectAccess2007(dbVBI1) #dit is een accdb file
+
+  treesA2VBI1Orig <- sqlQuery(connectieVBI1, query_treesA2VBI1, stringsAsFactors = TRUE)
+
+  odbcClose(connectieVBI1)
+
+  treesA2VBI1 <- plyr::rename(treesA2VBI1Orig,c(PLOTNR="IDPlots",
+                                      IDTree="ID",    # ipv BOOMNR
+                                      BOOMSOORT="IDTreeSp",
+                                      NAAM="Species",
+                                      OMTREK="Perimeter_cm",
+                                      DOOD="StatusTreeCode"))
+
+  treesA2VBI1 <- treesA2VBI1 %>%
+    dplyr::filter(Perimeter_cm == 0)
+
+  treesA2VBI1$Alive <- treesA2VBI1$StatusTreeCode == 0
+
+
+
+  if (is.null(plotIDs)){
+
+    result <- treesA2VBI1
+
+  } else {
+
+    result <- treesA2VBI1[treesA2VBI1$IDPlots %in% plotIDs,]
+
+  }
+
+  return(result)
+
+
+}
+
+
 
 ### Haal gegevens over liggend dood hout uit de VBI2-databank
 
@@ -1069,6 +1304,46 @@ FROM LIM_data;
   } else {
 
     result <- logs[logs$IDPlots %in% plotIDs,]
+
+  }
+
+  return(result)
+
+}
+
+### Haal gegevens over liggend dood hout uit de VBI1-databank
+
+getLogsVBI1 <- function (db = dbVBI1_veg, plotIDs = NULL ) {
+
+  query_LogsVBI1<-" SELECT KOP.Opnamenummer,
+    KOP.[7-22cm liggend dood hout],
+    KOP.[>22cm liggend dood hout],
+    KOP.[>40cm liggend dood hout]
+    FROM KOP;"
+
+  connectieVBI1 <- odbcConnectAccess2007(db) #dit is een accdb file
+  logsVBI1Orig <- sqlQuery(connectieVBI1, query_LogsVBI1, stringsAsFactors = TRUE)
+  odbcClose(connectieVBI1)
+
+  logsVBI1 <- rename(logsVBI1Orig,c(Opnamenummer="IDPlots"
+                                ,"7-22cm liggend dood hout"="LogLength_Diam_7_22_cm"
+                                ,">22cm liggend dood hout"="LogLength_Diam_22_40_cm"
+                                ,">40cm liggend dood hout"="LogLength_Diam_plus40_cm"))
+
+  logsVBI1[is.na(logsVBI1)] <- 0
+
+  logsVBI1$Volume_ha<-(logsVBI1$LogLength_Diam_7_22_cm*(14.5/100/2)^2*pi
+                         + logsVBI1$LogLength_Diam_22_40_cm*(31/100/2)^2*pi
+                         + logsVBI1$LogLength_Diam_plus40_cm*(60/100/2)^2*pi)/(16*16)*10000
+
+
+  if (is.null(plotIDs)){
+
+    result <- logsVBI1
+
+  } else {
+
+    result <- logsVBI1[logsVBI1$IDPlots %in% plotIDs,]
 
   }
 
@@ -1142,7 +1417,7 @@ calculateVolumeAndBasalArea <- function(treesA3A4, shoots){
 
   # tarieven
 
-  query_tarieven2ing<-"
+  query_tarieven2ing <-"
 SELECT
   tblTariefgroepBoomsoort.ID
   , tblTariefgroepBoomsoort.Value
@@ -1240,6 +1515,115 @@ SELECT
 
 }
 
+##############################################################################
+
+### Berkening volume en grondvlak op basis van hoogte- en omtrekgegevens VBI1
+
+calculateVolumeAndBasalAreaVBI1 <- function(treesA3A4, shoots){
+
+  # tarieven
+
+  query_tarieven2ing <-"
+SELECT
+  tblTariefgroepBoomsoort.ID
+  , tblTariefgroepBoomsoort.Value
+  , tblTarieven_2ing.Tarief
+  , tblTarieven_2ing.groepNaam
+  , tblTarieven_2ing.a
+  , tblTarieven_2ing.b
+  , tblTarieven_2ing.c
+  , tblTarieven_2ing.d
+  , tblTarieven_2ing.e
+  , tblTarieven_2ing.f
+  , tblTarieven_2ing.g
+  , tblTarieven_2ing.Formule_type
+  FROM tblTariefgroepBoomsoort
+  INNER JOIN tblTarieven_2ing ON tblTariefgroepBoomsoort.TariefID = tblTarieven_2ing.groepID
+  ;"
+
+  query_tarieven1ing<-"
+SELECT tblTariefgroepBoomsoort.ID
+, tblTariefgroepBoomsoort.Value
+, tblTariefgroepBoomsoort.TariefID
+, tblTarieven_1ing.groepNaam
+, tblTarieven_1ing.a
+, tblTarieven_1ing.b
+, tblTarieven_1ing.c
+, tblTarieven_1ing.d
+, tblTarieven_1ing.Tarief
+FROM tblTariefgroepBoomsoort
+LEFT JOIN tblTarieven_1ing ON tblTariefgroepBoomsoort.TariefID = tblTarieven_1ing.groepID
+;"
+
+  connectieExterneData <- odbcConnectAccess2007(dbExterneData)
+  tarieven2ingOrig <- sqlQuery(connectieExterneData, query_tarieven2ing, stringsAsFactors = TRUE)
+  tarieven1ingOrig <- sqlQuery(connectieExterneData, query_tarieven1ing, stringsAsFactors = TRUE)
+  odbcClose(connectieExterneData)
+
+  tarieven2ing <- plyr::rename(tarieven2ingOrig,c(ID="IDTreeSp",Value="Species"))
+  tarieven1ing <- plyr::rename(tarieven1ingOrig,c(ID="IDTreeSp",Value="Species"))
+
+  ### volume & grondvlak individuele bomen
+  treesA3A4_levend <- treesA3A4 %>%
+    filter(Alive | is.na(Alive)) %>%
+    calcVolumeAndBasalAreaTree(tarieven2ing,2)
+
+  #dood hout heeft steeds als hoogte 0 in databank --> tarieven met 1 ingang
+  treesA3A4_dood <- treesA3A4 %>%
+    filter(!Alive & !is.na(Alive)) %>%
+    calcVolumeAndBasalAreaTree(tarieven1ing,1)
+
+  treesA3A4 <- bind_rows(treesA3A4_levend, treesA3A4_dood)
+
+  #expansiefactoren --> volume per ha
+  treesA3A4$Volume_ha <- ifelse(treesA3A4$Perimeter_cm < 122,
+                                  10000 * treesA3A4$Volume / treesA3A4$AreaA3_m2,
+                                  10000 * treesA3A4$Volume / treesA3A4$AreaA4_m2)
+
+  #expansiefactoren -->  grondvlak per hectare
+  treesA3A4$BasalArea_ha <- ifelse(treesA3A4$Perimeter_cm < 122,
+                                 10000 * treesA3A4$BasalArea_m2/treesA3A4$AreaA3_m2,
+                                 10000 * treesA3A4$BasalArea_m2/treesA3A4$AreaA4_m2)
+
+  treesA3A4 <- treesA3A4[order(treesA3A4$IDPlots),]
+
+  ### volume & grondvlak per shoot
+  shootsA2 <- calcVolumeAndBasalAreaTree(shoots,tarieven1ing,1)
+  shootsA2$AreaA2_m2 <- pi * 4.5 * 4.5
+
+  #expansiefactoren voor A2 plot
+  shootsA2$Volume_ha <- 10000 * shootsA2$Volume / shootsA2$AreaA2_m2
+  shootsA2$BasalArea_ha <- 10000 * shootsA2$BasalArea_m2 / shootsA2$AreaA2_m2
+
+  ### volume & grondvlak per hakhoutstoof
+  hakhout <- shootsA2 %>%
+    dplyr::group_by(IDPlots, ID, Alive) %>%
+    dplyr::summarise(Volume_ha = sum(Volume_ha, na.rm = TRUE),
+              BasalArea_ha = sum(BasalArea_ha, na.rm = TRUE),
+              IDTreeSp = unique(IDTreeSp)[1],
+              NameNl = unique(NameNl)[1],
+              NameSc = unique(NameSc)[1],
+              ExoticSpecies = unique(ExoticSpecies)[1],
+              InvasiveSpecies = unique(InvasiveSpecies)[1],
+              Genus = unique(Genus)[1],
+              Spec = unique(Spec)[1]) %>%
+    ungroup()
+
+  hakhout$DataSet <- "VBI1"
+  hakhout$IDSegments <- 1
+  hakhout$Coppice_IndividualCode <- 20
+  hakhout$IntactTreeCode <- 10
+
+  trees_all <- treesA3A4 %>%
+    dplyr::select(-AreaA4_m2, -AreaA3_m2, -BasalArea_m2, -D, -Volume, -TariefID) %>%
+    bind_rows(hakhout)
+
+  return (trees_all)
+
+}
+
+
+############################################################################################
 
 ############################################################################################
 
@@ -1325,18 +1709,22 @@ getStructurePlot6510 <- function(db = dbHeideEn6510_2014_2015){
 
 calculateLSVI_dendroVBI2 <- function(db = dbVBI2, plotHabtypes, niveau = "segment", versieLSVI = "versie3"){
 
-  ### Soortenlijst opvragen voor gewenste versie van LSVI
   connDB <-   odbcConnectAccess2007(dbLSVI)
+  soortenlijstLSVI <- sqlQuery(connDB, 'select * from tblSoortenlijst_LSVI_HeideEnBoshabitats')
+  indicatorenLSVI <- sqlQuery(connDB, 'select * from tblIndicatoren_LSVI_HeideEnBoshabitats')
+  odbcClose(connDB)
 
+  ### Soortenlijst opvragen voor gewenste versie van LSVI
   if (versieLSVI == "versie3"){
 
-    soortenlijstLSVI <- sqlQuery(connDB, 'select * from tblSoortenlijst_LSVIv3')
-    soortenlijstLSVI <- soortenlijstLSVI[soortenlijstLSVI$LSVI_v3 == 1,]
-    indicatorenLSVI <- sqlQuery(connDB, 'select * from tblIndicatoren_LSVIv3_bossen')
+    soortenlijstLSVI <- soortenlijstLSVI[soortenlijstLSVI$LSVI_v3==1,]
+
+  } else if (versieLSVI == "versie2") {
+
+    soortenlijstLSVI <- soortenlijstLSVI[soortenlijstLSVI$LSVI_v2==1,]
 
   }
 
-  odbcClose(connDB)
 
   # data voor berekening indicatoren
 
@@ -1517,6 +1905,204 @@ if (niveau == "plot"){
 
 }
 
+###########################################################################################################################
+
+### Berekening indicatoren habitatstructuur van boshabitats + berekening grondvlakaandeel sleutelsoorten (vegetatie-indicator)
+
+calculateLSVI_dendroVBI1 <- function(db_dendro = dbVBI1, db_veg = dbVBI1_veg, plotHabtypes, niveau = "segment", versieLSVI = "versie3"){
+
+  ### Soortenlijst opvragen voor gewenste versie van LSVI
+  connDB <-   odbcConnectAccess2007(dbLSVI)
+  soortenlijstLSVI <- sqlQuery(connDB, 'select * from tblSoortenlijst_LSVI_HeideEnBoshabitats')
+  indicatorenLSVI <- sqlQuery(connDB, 'select * from tblIndicatoren_LSVI_HeideEnBoshabitats')
+  odbcClose(connDB)
+
+  if (versieLSVI == "versie3"){
+
+    soortenlijstLSVI <- soortenlijstLSVI[soortenlijstLSVI$LSVI_v3==1,]
+
+  } else if (versieLSVI == "versie2") {
+
+    soortenlijstLSVI <- soortenlijstLSVI[soortenlijstLSVI$LSVI_v2==1,]
+
+  }
+
+
+
+  # data voor berekening indicatoren
+
+  treesA3A4 <- getTreesA3A4VBI1(db = db_dendro,plotIDs = plotHabtypes$IDPlots)
+
+  shoots <- getShootsVBI1(db_dendro,plotIDs = plotHabtypes$IDPlots)
+
+  treesA3A4_VolBA <- calculateVolumeAndBasalAreaVBI1(treesA3A4, shoots)
+
+  ssBoomlaag <- soortenlijstLSVI[!is.na(soortenlijstLSVI$Omschrijving) & soortenlijstLSVI$Omschrijving == "sleutelsoorten_boomlaag",,drop=F]
+
+  #groeiklasse
+
+  treesA3A4_VolBA$Groeiklasse <- ifelse (treesA3A4_VolBA$DBH_mm >=70 & treesA3A4_VolBA$DBH_mm < 140 & treesA3A4_VolBA$Alive,"Groeiklasse4",
+                                         ifelse(treesA3A4_VolBA$DBH_mm < 500 & treesA3A4_VolBA$Alive, "Groeiklasse5",
+                                                ifelse(treesA3A4_VolBA$DBH_mm < 800 & treesA3A4_VolBA$Alive, "Groeiklasse6",
+                                                       ifelse(treesA3A4_VolBA$DBH_mm > 800 & treesA3A4_VolBA$Alive, "Groeiklasse7",NA))))
+
+  treesA2 <- getTreesA2VBI1(db_dendro,plotHabtypes$IDPlots)
+
+  speciesVeglayers <- getCoverSpeciesVBI1(db_veg,plotHabtypes$IDPlots)
+
+  coverVeglayers <- getCoverVeglayersVBI1(db_veg,plotHabtypes$IDPlots)
+
+  logs <- getLogsVBI1(db_veg, plotHabtypes$IDPlots)
+
+  treesA3A4_VolBA <- merge(treesA3A4_VolBA,plotHabtypes,by="IDPlots",all.x=TRUE)
+
+  calcIndic <- function(treedata,treelist){
+    data.frame(
+      VolumeStaandDood = sum(treedata$Volume_ha*(!treedata$Alive),na.rm = TRUE),
+      VolumeStaandLevend = sum(treedata$Volume_ha*(treedata$Alive),na.rm = TRUE),
+      GrondvlakDood = sum(treedata$BasalArea_ha*(!treedata$Alive),na.rm = TRUE),
+      GrondvlakLevend = sum(treedata$BasalArea_ha*(treedata$Alive),na.rm = TRUE),
+      GrondvlakLevendSs = sum(treedata$BasalArea_ha*(treedata$Alive)*(treedata$NameSc %in% treelist[treelist$HabCode == as.character(unique(treedata$HabCode)),]$WetNaam),na.rm = TRUE),
+      DikDoodHoutStaand_ha = sum((!treedata$Alive)*(treedata$DBH_mm > 400)*ifelse(treedata$Perimeter_cm < 122, 10000.0/treedata$AreaA3_m2, 10000.0/treedata$AreaA4_m2),na.rm = TRUE),
+      AantalGroeiklassenA3A4 = length (unique(na.omit(treedata$Groeiklasse))),
+      Groeiklasse7 = "Groeiklasse7" %in% treedata$Groeiklasse,
+      Groeiklasse5_6_7 = "Groeiklasse5" %in% treedata$Groeiklasse | "Groeiklasse6" %in% treedata$Groeiklasse | "Groeiklasse7" %in% treedata$Groeiklasse)
+  }
+
+  plots <- ddply(treesA3A4_VolBA, .(IDPlots,IDSegments,HabCode), calcIndic, treelist= ssBoomlaag)
+
+  # een A2 boom komt oveeen met groeiklasse 3
+  treesA2_plots <- data.frame(IDPlots = unique(treesA2$IDPlots), Groeiklasse3 = TRUE)
+  treesA2_plots <- merge(treesA2_plots,plotHabtypes,by="IDPlots",all.x=TRUE)
+
+  plots <- merge(plots,treesA2_plots,by=c("IDPlots","HabCode"), all= TRUE)
+
+  # natuurlijke verjonging komt overeen met groeiklasse 2
+  speciesVeglayers$Groeiklasse2_species <- speciesVeglayers$Tree & (speciesVeglayers$Vegetatielaag== "kruidlaag")
+
+  speciesVeglayers_plot <- ddply(speciesVeglayers,.(IDPlots),summarise,
+                                 Groeiklasse2 = sum(Groeiklasse2_species) > 0)
+
+  speciesVeglayers_plot <- merge(speciesVeglayers_plot,plotHabtypes,by="IDPlots",all.x=TRUE)
+
+  plots <- merge(plots, speciesVeglayers_plot[,c("IDPlots", "HabCode","Groeiklasse2")], by =c("IDPlots","HabCode"),all=TRUE)
+
+  plots$IDSegments <- ifelse(is.na(plots$IDSegments),1,plots$IDSegments)
+
+  plots$Groeiklasse2 <- ifelse(is.na(plots$Groeiklasse2),FALSE,plots$Groeiklasse2)
+  plots$Groeiklasse3 <- ifelse(is.na(plots$Groeiklasse3),FALSE,plots$Groeiklasse3)
+  plots$Groeiklasse7 <- ifelse(is.na(plots$Groeiklasse7),FALSE,plots$Groeiklasse7)
+  plots$AantalGroeiklassenA3A4 <- ifelse(is.na(plots$AantalGroeiklassenA3A4),FALSE,plots$AantalGroeiklassenA3A4)
+
+  plots$AantalGroeiklassen <- plots$AantalGroeiklassenA3A4 + plots$Groeiklasse3 + plots$Groeiklasse2
+
+  # groeiklasse 1 komt overeen met 'open ruimte in bos', maar kunnen we niet afleiden uit VBI2-data
+
+  # volume liggend dood hout per plot
+  logs_plot <- ddply(logs,.(IDPlots), summarise,
+                     VolumeLiggendDood = sum(Volume_ha,na.rm=TRUE))
+
+  plots <- merge(plots,logs_plot, by = "IDPlots", all.x=TRUE)
+
+  # aandeel dood hout
+  plots$VolumeAandeelDoodhoutStaand <- plots$VolumeStaandDood/(plots$VolumeStaandDood + plots$VolumeStaandLevend) * 100
+
+  plots$GrondvlakAandeelDoodhoutStaand <- plots$GrondvlakDood/(plots$GrondvlakDood + plots$GrondvlakLevend) * 100
+
+  plots$VolumeAandeelDoodhoutTotaal <- (plots$VolumeStaandDood + plots$VolumeLiggendDood) / (plots$VolumeStaandDood + plots$VolumeLiggendDood + plots$VolumeStaandLevend) * 100
+
+  # grondvlakaandeel sleutelsoorten
+  plots$GrondvlakAandeelSs <- ifelse(plots$GrondvlakLevend > 0,plots$GrondvlakLevendSs/plots$GrondvlakLevend * 100,0)
+
+  calcIndic2 <- function(treedata,treelist){
+    data.frame(
+      GrondvlakLevendSs_soort = sum(treedata$BasalArea_ha*(treedata$Alive)*(treedata$NameSc %in% treelist[treelist$HabCode == as.character(unique(treedata$HabCode)),]$WetNaam),na.rm=TRUE)
+    )
+  }
+
+  treeSpecies <- ddply(treesA3A4_VolBA,.(IDPlots,IDSegments,NameSc,HabCode), calcIndic2,treelist = ssBoomlaag)
+
+  treeSpecies <- merge(treeSpecies,plots[,c("IDPlots","IDSegments","GrondvlakLevend")], by = c("IDPlots","IDSegments"), all.x =TRUE)
+
+  treeSpecies$GrondvlakAandeelSs_soort <- treeSpecies$GrondvlakLevendSs_soort/treeSpecies$GrondvlakLevend * 100
+
+  plots2 <- ddply(treeSpecies,.(IDPlots, IDSegments),summarise,
+                  AantalSsBedekkingMinstens10 = sum(GrondvlakAandeelSs_soort >= 10))
+
+  plots <- merge(plots, plots2, by=c("IDPlots","IDSegments"), all.x= TRUE)
+
+  # aantal abundante vegetatielagen
+
+  coverVeglayers$HerbLayerAbundant <- (coverVeglayers$CoverHerblayer >=25) | ((coverVeglayers$CoverHerblayer + coverVeglayers$CoverMosslayer) >= 25)
+
+  coverVeglayers$ShrubLayerAbundant <- coverVeglayers$CoverShrublayer >= 25
+
+  coverVeglayers$TreeLayerAbundant <- coverVeglayers$CoverTreelayer >= 25
+
+  coverVeglayers$AantalAbundanteVegetatielagen <- coverVeglayers$HerbLayerAbundant + coverVeglayers$ShrubLayerAbundant + coverVeglayers$TreeLayerAbundant
+
+  # aantal aanwezige vegetatielagen
+
+  coverVeglayers$HerbLayerPresent <- (coverVeglayers$CoverHerblayer >0) | ((coverVeglayers$CoverHerblayer + coverVeglayers$CoverMosslayer) > 0)
+
+  coverVeglayers$ShrubLayerPresent <- coverVeglayers$CoverShrublayer > 0
+
+  coverVeglayers$TreeLayerPresent <- coverVeglayers$CoverTreelayer > 0
+
+  coverVeglayers$AantalAanwezigeVegetatielagen <- coverVeglayers$HerbLayerPresent + coverVeglayers$ShrubLayerPresent + coverVeglayers$TreeLayerPresent
+
+  # aantal frequente vegetatielagen
+
+  coverVeglayers$HerbLayerFrequent <- (coverVeglayers$CoverHerblayer > 5) | ((coverVeglayers$CoverHerblayer + coverVeglayers$CoverMosslayer) > 5)
+
+  coverVeglayers$ShrubLayerFrequent <- coverVeglayers$CoverShrublayer > 5
+
+  coverVeglayers$TreeLayerFrequent <- coverVeglayers$CoverTreelayer > 5
+
+  coverVeglayers$AantalFrequenteVegetatielagen <- coverVeglayers$HerbLayerFrequent + coverVeglayers$ShrubLayerFrequent + coverVeglayers$TreeLayerFrequent
+
+
+  coverVeglayers <- merge(coverVeglayers,plotHabtypes,by="IDPlots",all.x=TRUE)
+
+  plots <- merge(plots, coverVeglayers[,c("IDPlots","HabCode","AantalAbundanteVegetatielagen", "AantalAanwezigeVegetatielagen", "AantalFrequenteVegetatielagen")],by=c("IDPlots","HabCode"),all=TRUE)
+
+  # plots$VolumeAandeelDoodhoutStaand <- ifelse(is.na(plots$VolumeAandeelDoodhoutStaand),0,plots$VolumeAandeelDoodhoutStaand)
+  #
+  # plots$GrondvlakAandeelDoodhoutStaand <- ifelse(is.na(plots$GrondvlakAandeelDoodhoutStaand),0,plots$GrondvlakAandeelDoodhoutStaand)
+  #
+  # plots$VolumeAandeelDoodhoutTotaal <- ifelse(is.na(plots$VolumeAandeelDoodhoutTotaal),0,plots$VolumeAandeelDoodhoutTotaal)
+  #
+  # plots$AantalSsBedekkingMinstens10 <- ifelse(is.na(plots$AantalSsBedekkingMinstens10),0,plots$AantalSsBedekkingMinstens10)
+  #
+  # plots$GrondvlakAandeelSs <- ifelse(is.na(plots$GrondvlakAandeelSs),0,plots$GrondvlakAandeelSs)
+
+  ### Selectie indicatoren voor LSVI_v3
+
+  structuurIndicatoren_LSVI3 <- plots[,c("IDPlots","IDSegments","HabCode","AantalFrequenteVegetatielagen","AantalGroeiklassen", "Groeiklasse7", "Groeiklasse5_6_7", "VolumeAandeelDoodhoutTotaal","GrondvlakAandeelSs","DikDoodHoutStaand_ha")]
+
+  #naamgeving conform databank indicatoren
+
+  structuurIndicatoren_LSVI3 <- plyr::rename(structuurIndicatoren_LSVI3, c(AantalFrequenteVegetatielagen ="frequenteVegetatielagen", AantalGroeiklassen = "groeiklassen", Groeiklasse7 = "groeiklasse7",Groeiklasse5_6_7 ="groeiklasse5_6_7" , VolumeAandeelDoodhoutTotaal = "volumeAandeelDoodHout", GrondvlakAandeelSs = "sleutelsoorten_boomlaag_grondvlakAandeel", DikDoodHoutStaand_ha = "dikDoodHoutStaand_ha"))
+
+structuurIndicatoren_LSVI3_long <- melt (structuurIndicatoren_LSVI3, id.vars = c("IDPlots","IDSegments","HabCode"), measure.vars = c("sleutelsoorten_boomlaag_grondvlakAandeel", "frequenteVegetatielagen","groeiklassen","groeiklasse7" ,"groeiklasse5_6_7", "volumeAandeelDoodHout","dikDoodHoutStaand_ha"), variable.name = "AnalyseVariabele", value.name = "Waarde")
+
+structuurIndicatoren_LSVI3_selectie <- merge(structuurIndicatoren_LSVI3_long, indicatorenLSVI[indicatorenLSVI$Meting == "structuurplot",], by = c("HabCode", "AnalyseVariabele"))
+
+indicatoren <- structuurIndicatoren_LSVI3_selectie[,c("HabCode","IDPlots", "IDSegments", "Criterium", "Indicator", "AnalyseVariabele", "Soortengroep", "Vegetatielaag","Eenheid", "Drempelwaarde","Indicatortype","Meting", "Combinatie", "Waarde")]
+
+indicatoren$Beoordeling <- ifelse (indicatoren$Indicatortype == "negatief", ifelse(indicatoren$Waarde <= indicatoren$Drempelwaarde, 1,0),
+                                   ifelse (indicatoren$Indicatortype == "positief", ifelse(indicatoren$Waarde >= indicatoren$Drempelwaarde, 1,0),NA))
+
+
+  indicatoren <- indicatoren[,!colnames(indicatoren) %in% "IDSegments"]
+  indicatoren <- arrange(indicatoren, IDPlots)
+
+  return(indicatoren)
+
+}
+
+
+
 ###########################################################################################################
 
 
@@ -1636,6 +2222,11 @@ calculateLSVI_vegetatieopname <- function (plotHabtypes, bedekkingSoorten, bedek
     filter(Selectie == 1 & !is.na(Selectie))
 
   soortenlijstLSVI$VersieLSVI <- tolower(soortenlijstLSVI$VersieLSVI)
+
+  if (versieLSVI != "beide"){
+    soortenlijstLSVI <- soortenlijstLSVI %>%
+      filter(VersieLSVI == versieLSVI)
+  }
 
   ### Selectie van indicatoren die op basis van vegetatieopname worden berekend
   indicatorenLSVI_selectie <- indicatorenLSVI[indicatorenLSVI$Meting == "vegetatieplot",]
