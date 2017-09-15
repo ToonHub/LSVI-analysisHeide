@@ -45,7 +45,7 @@ dbExterneData<-"../Data/ExterneData/VBIExterneData.accdb"
 #../Databank strata
 #---------------------
 
-dbStrata<-"../Data/MeetgegevensVBI2/Versie3/VBI_Strata_v2016-08-31.accdb"
+dbStrata<-"../Data/MeetgegevensVBI2/Versie3/VBI_Strata_v2016-08-31.mdb"
 
 #------------------------
 # LSVI indicatoren
