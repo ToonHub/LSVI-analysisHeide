@@ -4,6 +4,7 @@ library(reshape)
 library(rgdal)
 #library(rgeos)
 library(dplyr)
+library(RODBC)
 
 ###############################
 #VOORBEREIDING STEEKPROEFKADER#
@@ -55,7 +56,7 @@ temp1$test <- temp2$phab
 temp1$phab <- temp2$value
 BWK_hab <- temp1
 
-BWK_hab <- rename(BWK_hab, c(value="code"))
+BWK_hab <- rename(BWK_hab, code = "value")
 BWK_hab$test <- NULL
 BWK_hab <- BWK_hab[!is.na(BWK_hab$code),]
 
@@ -112,15 +113,18 @@ VBI_habitat <- merge(VBI_habitat[,c("Pol_ID","PLOTNR")], BWK_habsubt[,c("Pol_ID"
 
 VBI_habitat <- plyr::rename(VBI_habitat, c(PLOTNR= "IDPlots",habsubt = "HabCode", phab = "Phab"))
 
-VBI_habitat$HabCode <- revalue (VBI_habitat$HabCode, c("9130_end" = "9130", "9120_qb" = "9120"))
+VBI_habitat$HabCode <- plyr::revalue (VBI_habitat$HabCode, c("9130_end" = "9130", "9120_qb" = "9120"))
 
-VBI_habitat <- ddply(VBI_habitat,.(Pol_ID,IDPlots,HabCode), summarise,
-                     Phab = sum(Phab,na.rm= TRUE),
-                     Pol_beschrijving = unique(Pol_beschrijving))
+VBI_habitat <- VBI_habitat %>%
+              group_by(Pol_ID, IDPlots, HabCode) %>%
+              summarise(Phab = sum(Phab,na.rm= TRUE),
+                     Pol_beschrijving = unique(Pol_beschrijving)) %>%
+              ungroup()  %>%
+              select(IDPlots,HabCode,Phab,Pol_beschrijving)
 
-VBI_habitat <- VBI_habitat[,c("IDPlots","HabCode","Phab","Pol_beschrijving")]
+dbName <-       "C:/Users/toon_westra/toon.westra@inbo.be/Bosinventaris/00Bosinventaris_finaal_vs3/Output/VBI_Strata_v2016-08-31.mdb"
 
-dbName <-       "Q:/WOD/Projecten2014/projectenINBO/ToonW/09769_VerwerkingBosinventarisatie/Bosinventaris_finaal/Output/VBI_Strata_v2015-07-31.accdb"
+versie <- "2017-01-01"
 
 connection <- odbcConnectAccess2007(dbName)
 sqlSave(connection, VBI_habitat, paste("tblN2000Habitat_versie",versie, sep =""))
