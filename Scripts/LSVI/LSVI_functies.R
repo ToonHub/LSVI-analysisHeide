@@ -978,7 +978,7 @@ ON tblBoomsoorten.BOOMSOORTID = tblA34.BOOMSOORT
   treesA3A4$StatusTreeCode <- treesA3A4$StatusTreeCode+1
 
   #conversie omtrek op 1,5m naar 1,3m
-  convC130 <- rename(convC130,c(BOOMSOORTID="IDTreeSp"))
+  convC130 <- plyr::rename(convC130,c(BOOMSOORTID="IDTreeSp"))
   treesA3A4 <- merge(treesA3A4,convC130,by="IDTreeSp",all.x=TRUE)
   treesA3A4$C130 <- treesA3A4$A+treesA3A4$B * treesA3A4$Perimeter_cm
   treesA3A4$Perimeter_cm <- treesA3A4$C130
@@ -1181,7 +1181,7 @@ query_treesA2VBI1 <-"
   shootsVBI1$Alive <- shootsVBI1$StatusTreeCode == 0
 
   #conversie omtrek op 1,5m naar 1,3m
-  convC130 <- rename(convC130,c(BOOMSOORTID="IDTreeSp"))
+  convC130 <- plyr::rename(convC130,c(BOOMSOORTID="IDTreeSp"))
   shootsVBI1 <- merge(shootsVBI1,convC130,by="IDTreeSp",all.x=TRUE)
   shootsVBI1$C130 <- shootsVBI1$A + shootsVBI1$B * shootsVBI1$Perimeter_cm
   shootsVBI1$Perimeter_cm <- shootsVBI1$C130
@@ -1325,14 +1325,14 @@ getLogsVBI1 <- function (db = dbVBI1_veg, plotIDs = NULL ) {
   logsVBI1Orig <- sqlQuery(connectieVBI1, query_LogsVBI1, stringsAsFactors = TRUE)
   odbcClose(connectieVBI1)
 
-  logsVBI1 <- rename(logsVBI1Orig,c(Opnamenummer="IDPlots"
+  logsVBI1 <- plyr::rename(logsVBI1Orig,c(Opnamenummer="IDPlots"
                                 ,"7-22cm liggend dood hout"="LogLength_Diam_7_22_cm"
                                 ,">22cm liggend dood hout"="LogLength_Diam_22_40_cm"
                                 ,">40cm liggend dood hout"="LogLength_Diam_plus40_cm"))
 
   logsVBI1[is.na(logsVBI1)] <- 0
 
-  logsVBI1$Volume_ha<-(logsVBI1$LogLength_Diam_7_22_cm*(14.5/100/2)^2*pi
+  logsVBI1$Volume_ha <- (logsVBI1$LogLength_Diam_7_22_cm*(14.5/100/2)^2*pi
                          + logsVBI1$LogLength_Diam_22_40_cm*(31/100/2)^2*pi
                          + logsVBI1$LogLength_Diam_plus40_cm*(60/100/2)^2*pi)/(16*16)*10000
 
@@ -1498,11 +1498,13 @@ SELECT
                      BasalArea_ha_hakhout=sum(BasalArea_ha,na.rm=TRUE),
                      MaxPerimeter_cm=max(Perimeter_cm))
 
-  treesA3A4<-merge(treesA3A4,hakhout,by=c("IDPlots","ID"),all.x=TRUE)
+  treesA3A4 <- merge(treesA3A4,hakhout,by=c("IDPlots","ID"),all.x=TRUE)
 
   treesA3A4$Volume_ha<-ifelse(!is.na(treesA3A4$Volume_ha_hakhout),treesA3A4$Volume_ha_hakhout,treesA3A4$Volume_ha)
 
   treesA3A4$BasalArea_ha<-ifelse(!is.na(treesA3A4$BasalArea_ha_hakhout),treesA3A4$BasalArea_ha_hakhout,treesA3A4$BasalArea_ha)
+
+  treesA3A4$Perimeter_cm <-ifelse(!is.na(treesA3A4$MaxPerimeter_cm),treesA3A4$MaxPerimeter_cm, treesA3A4$Perimeter_cm)
 
   #negatieve volumes = 0
 
@@ -1600,6 +1602,7 @@ LEFT JOIN tblTarieven_1ing ON tblTariefgroepBoomsoort.TariefID = tblTarieven_1in
     dplyr::group_by(IDPlots, ID, Alive) %>%
     dplyr::summarise(Volume_ha = sum(Volume_ha, na.rm = TRUE),
               BasalArea_ha = sum(BasalArea_ha, na.rm = TRUE),
+              Perimeter_cm = max(Perimeter_cm, na.rm =TRUE),
               IDTreeSp = unique(IDTreeSp)[1],
               NameNl = unique(NameNl)[1],
               NameSc = unique(NameSc)[1],
@@ -1613,6 +1616,7 @@ LEFT JOIN tblTarieven_1ing ON tblTariefgroepBoomsoort.TariefID = tblTarieven_1in
   hakhout$IDSegments <- 1
   hakhout$Coppice_IndividualCode <- 20
   hakhout$IntactTreeCode <- 10
+  hakhout$DBH_mm <- hakhout$Perimeter_cm/pi * 10
 
   trees_all <- treesA3A4 %>%
     dplyr::select(-AreaA4_m2, -AreaA3_m2, -BasalArea_m2, -D, -Volume, -TariefID) %>%
@@ -1717,11 +1721,11 @@ calculateLSVI_dendroVBI2 <- function(db = dbVBI2, plotHabtypes, niveau = "segmen
   ### Soortenlijst opvragen voor gewenste versie van LSVI
   if (versieLSVI == "versie3"){
 
-    soortenlijstLSVI <- soortenlijstLSVI[soortenlijstLSVI$LSVI_v3==1,]
+    soortenlijstLSVI <- soortenlijstLSVI[soortenlijstLSVI$Versie3==1,]
 
   } else if (versieLSVI == "versie2") {
 
-    soortenlijstLSVI <- soortenlijstLSVI[soortenlijstLSVI$LSVI_v2==1,]
+    soortenlijstLSVI <- soortenlijstLSVI[soortenlijstLSVI$Versie2==1,]
 
   }
 
@@ -1758,6 +1762,16 @@ calculateLSVI_dendroVBI2 <- function(db = dbVBI2, plotHabtypes, niveau = "segmen
 
   treesA3A4_VolBA <- merge(treesA3A4_VolBA,plotHabtypes,by="IDPlots",all.x=TRUE)
 
+  # treesA3A4_VolBA_check <- treesA3A4_VolBA %>%
+  #   dplyr::rename(WetNaam = NameSc) %>%
+  #   left_join(ssBoomlaag, by = c("HabCode","WetNaam"))
+  #
+  # plots_check <- treesA3A4_VolBA_check %>%
+  #   group_by(IDPlots,Alive) %>%
+  #   summarise(GrondvlakSs = sum(BasalArea_ha * !is.na(Omschrijving) ))
+
+
+
   calcIndic <- function(treedata,treelist){
     data.frame(
       VolumeStaandDood = sum(treedata$Volume_ha*(!treedata$Alive),na.rm = TRUE),
@@ -1765,7 +1779,7 @@ calculateLSVI_dendroVBI2 <- function(db = dbVBI2, plotHabtypes, niveau = "segmen
       GrondvlakDood = sum(treedata$BasalArea_ha*(!treedata$Alive),na.rm = TRUE),
       GrondvlakLevend = sum(treedata$BasalArea_ha*(treedata$Alive),na.rm = TRUE),
       GrondvlakLevendSs = sum(treedata$BasalArea_ha*(treedata$Alive)*(treedata$NameSc %in% treelist[treelist$HabCode == as.character(unique(treedata$HabCode)),]$WetNaam),na.rm = TRUE),
-      DikDoodHoutStaand_ha = sum((!treedata$Alive)*(treedata$DBH_mm > 400)*ifelse(treedata$Perimeter_cm < 122, 10000.0/treedata$AreaA3_m2, 10000.0/treedata$AreaA4_m2),na.rm = TRUE),
+      DikDoodHoutStaand_ha = sum((!treedata$Alive)*(treedata$DBH_mm > 400) * (treedata$Coppice_IndividualCode == 10) *ifelse(treedata$Perimeter_cm < 122, 10000.0/treedata$AreaA3_m2, 10000.0/treedata$AreaA4_m2),na.rm = TRUE),
       AantalGroeiklassenA3A4 = length (unique(na.omit(treedata$Groeiklasse))),
       Groeiklasse7 = "Groeiklasse7" %in% treedata$Groeiklasse,
       Groeiklasse5_6_7 = "Groeiklasse5" %in% treedata$Groeiklasse | "Groeiklasse6" %in% treedata$Groeiklasse | "Groeiklasse7" %in% treedata$Groeiklasse)
@@ -1882,13 +1896,13 @@ calculateLSVI_dendroVBI2 <- function(db = dbVBI2, plotHabtypes, niveau = "segmen
 
   ### Selectie indicatoren voor LSVI_v3
 
-  structuurIndicatoren_LSVI3 <- plots[,c("IDPlots","IDSegments","HabCode","AantalFrequenteVegetatielagen","AantalGroeiklassen", "Groeiklasse7", "Groeiklasse5_6_7", "VolumeAandeelDoodhoutTotaal","GrondvlakAandeelSs","DikDoodHoutStaand_ha")]
+  structuurIndicatoren_LSVI3 <- plots[,c("IDPlots","IDSegments","HabCode","AantalFrequenteVegetatielagen","AantalGroeiklassen", "Groeiklasse7", "Groeiklasse5_6_7", "VolumeAandeelDoodhoutStaand","GrondvlakAandeelSs","DikDoodHoutStaand_ha")]
 
   #naamgeving conform databank indicatoren
 
-  structuurIndicatoren_LSVI3 <- plyr::rename(structuurIndicatoren_LSVI3, c(AantalFrequenteVegetatielagen ="frequenteVegetatielagen", AantalGroeiklassen = "groeiklassen", Groeiklasse7 = "groeiklasse7",Groeiklasse5_6_7 ="groeiklasse5_6_7" , VolumeAandeelDoodhoutTotaal = "volumeAandeelDoodHout", GrondvlakAandeelSs = "sleutelsoorten_boomlaag_grondvlakAandeel", DikDoodHoutStaand_ha = "dikDoodHoutStaand_ha"))
+  structuurIndicatoren_LSVI3 <- plyr::rename(structuurIndicatoren_LSVI3, c(AantalFrequenteVegetatielagen ="frequenteVegetatielagen", AantalGroeiklassen = "groeiklassen", Groeiklasse7 = "groeiklasse7",Groeiklasse5_6_7 ="groeiklasse5_6_7" , VolumeAandeelDoodhoutStaand = "volumeAandeelDoodHout", GrondvlakAandeelSs = "sleutelsoorten_boomlaag_grondvlakAandeel", DikDoodHoutStaand_ha = "dikDoodHoutStaand_ha"))
 
-structuurIndicatoren_LSVI3_long <- melt (structuurIndicatoren_LSVI3, id.vars = c("IDPlots","IDSegments","HabCode"), measure.vars = c("sleutelsoorten_boomlaag_grondvlakAandeel", "frequenteVegetatielagen","groeiklassen","groeiklasse7" ,"groeiklasse5_6_7", "volumeAandeelDoodHout","dikDoodHoutStaand_ha"), variable.name = "AnalyseVariabele", value.name = "Waarde")
+structuurIndicatoren_LSVI3_long <- gather(structuurIndicatoren_LSVI3, sleutelsoorten_boomlaag_grondvlakAandeel, frequenteVegetatielagen, groeiklassen, groeiklasse7 , groeiklasse5_6_7, volumeAandeelDoodHout, dikDoodHoutStaand_ha, key = "AnalyseVariabele", value = "Waarde")
 
 structuurIndicatoren_LSVI3_selectie <- merge(structuurIndicatoren_LSVI3_long, indicatorenLSVI[indicatorenLSVI$Meting == "structuurplot",], by = c("HabCode", "AnalyseVariabele"))
 
@@ -1919,11 +1933,11 @@ calculateLSVI_dendroVBI1 <- function(db_dendro = dbVBI1, db_veg = dbVBI1_veg, pl
 
   if (versieLSVI == "versie3"){
 
-    soortenlijstLSVI <- soortenlijstLSVI[soortenlijstLSVI$LSVI_v3==1,]
+    soortenlijstLSVI <- soortenlijstLSVI[soortenlijstLSVI$Versie3==1,]
 
   } else if (versieLSVI == "versie2") {
 
-    soortenlijstLSVI <- soortenlijstLSVI[soortenlijstLSVI$LSVI_v2==1,]
+    soortenlijstLSVI <- soortenlijstLSVI[soortenlijstLSVI$Versie2==1,]
 
   }
 
@@ -1963,10 +1977,11 @@ calculateLSVI_dendroVBI1 <- function(db_dendro = dbVBI1, db_veg = dbVBI1_veg, pl
       GrondvlakDood = sum(treedata$BasalArea_ha*(!treedata$Alive),na.rm = TRUE),
       GrondvlakLevend = sum(treedata$BasalArea_ha*(treedata$Alive),na.rm = TRUE),
       GrondvlakLevendSs = sum(treedata$BasalArea_ha*(treedata$Alive)*(treedata$NameSc %in% treelist[treelist$HabCode == as.character(unique(treedata$HabCode)),]$WetNaam),na.rm = TRUE),
-      DikDoodHoutStaand_ha = sum((!treedata$Alive)*(treedata$DBH_mm > 400)*ifelse(treedata$Perimeter_cm < 122, 10000.0/treedata$AreaA3_m2, 10000.0/treedata$AreaA4_m2),na.rm = TRUE),
+      DikDoodHoutStaand_ha = sum((!treedata$Alive) * (treedata$DBH_mm > 400) * (treedata$Coppice_IndividualCode == 10) *  ifelse(treedata$Perimeter_cm < 122, 10000.0/(9*9*pi), 10000.0/(18*18*pi)),na.rm = TRUE),
       AantalGroeiklassenA3A4 = length (unique(na.omit(treedata$Groeiklasse))),
       Groeiklasse7 = "Groeiklasse7" %in% treedata$Groeiklasse,
-      Groeiklasse5_6_7 = "Groeiklasse5" %in% treedata$Groeiklasse | "Groeiklasse6" %in% treedata$Groeiklasse | "Groeiklasse7" %in% treedata$Groeiklasse)
+      Groeiklasse5_6_7 = "Groeiklasse5" %in% treedata$Groeiklasse | "Groeiklasse6" %in% treedata$Groeiklasse | "Groeiklasse7" %in% treedata$Groeiklasse
+      )
   }
 
   plots <- ddply(treesA3A4_VolBA, .(IDPlots,IDSegments,HabCode), calcIndic, treelist= ssBoomlaag)
@@ -1989,7 +2004,7 @@ calculateLSVI_dendroVBI1 <- function(db_dendro = dbVBI1, db_veg = dbVBI1_veg, pl
 
   plots$IDSegments <- ifelse(is.na(plots$IDSegments),1,plots$IDSegments)
 
-  plots$Groeiklasse2 <- ifelse(is.na(plots$Groeiklasse2),FALSE,plots$Groeiklasse2)
+  #plots$Groeiklasse2 <- ifelse(is.na(plots$Groeiklasse2),FALSE,plots$Groeiklasse2)
   plots$Groeiklasse3 <- ifelse(is.na(plots$Groeiklasse3),FALSE,plots$Groeiklasse3)
   plots$Groeiklasse7 <- ifelse(is.na(plots$Groeiklasse7),FALSE,plots$Groeiklasse7)
   plots$AantalGroeiklassenA3A4 <- ifelse(is.na(plots$AantalGroeiklassenA3A4),FALSE,plots$AantalGroeiklassenA3A4)
@@ -2066,25 +2081,25 @@ calculateLSVI_dendroVBI1 <- function(db_dendro = dbVBI1, db_veg = dbVBI1_veg, pl
 
   plots <- merge(plots, coverVeglayers[,c("IDPlots","HabCode","AantalAbundanteVegetatielagen", "AantalAanwezigeVegetatielagen", "AantalFrequenteVegetatielagen")],by=c("IDPlots","HabCode"),all=TRUE)
 
-  # plots$VolumeAandeelDoodhoutStaand <- ifelse(is.na(plots$VolumeAandeelDoodhoutStaand),0,plots$VolumeAandeelDoodhoutStaand)
+  plots$VolumeAandeelDoodhoutStaand <- ifelse(is.na(plots$VolumeAandeelDoodhoutStaand),0,plots$VolumeAandeelDoodhoutStaand)
   #
-  # plots$GrondvlakAandeelDoodhoutStaand <- ifelse(is.na(plots$GrondvlakAandeelDoodhoutStaand),0,plots$GrondvlakAandeelDoodhoutStaand)
+  plots$GrondvlakAandeelDoodhoutStaand <- ifelse(is.na(plots$GrondvlakAandeelDoodhoutStaand),0,plots$GrondvlakAandeelDoodhoutStaand)
   #
   # plots$VolumeAandeelDoodhoutTotaal <- ifelse(is.na(plots$VolumeAandeelDoodhoutTotaal),0,plots$VolumeAandeelDoodhoutTotaal)
   #
-  # plots$AantalSsBedekkingMinstens10 <- ifelse(is.na(plots$AantalSsBedekkingMinstens10),0,plots$AantalSsBedekkingMinstens10)
+  plots$AantalSsBedekkingMinstens10 <- ifelse(is.na(plots$AantalSsBedekkingMinstens10),0,plots$AantalSsBedekkingMinstens10)
   #
-  # plots$GrondvlakAandeelSs <- ifelse(is.na(plots$GrondvlakAandeelSs),0,plots$GrondvlakAandeelSs)
+  plots$GrondvlakAandeelSs <- ifelse(is.na(plots$GrondvlakAandeelSs),0,plots$GrondvlakAandeelSs)
 
   ### Selectie indicatoren voor LSVI_v3
 
-  structuurIndicatoren_LSVI3 <- plots[,c("IDPlots","IDSegments","HabCode","AantalFrequenteVegetatielagen","AantalGroeiklassen", "Groeiklasse7", "Groeiklasse5_6_7", "VolumeAandeelDoodhoutTotaal","GrondvlakAandeelSs","DikDoodHoutStaand_ha")]
+  structuurIndicatoren_LSVI3 <- plots[,c("IDPlots","IDSegments","HabCode","AantalFrequenteVegetatielagen","AantalGroeiklassen", "Groeiklasse7", "Groeiklasse5_6_7", "VolumeAandeelDoodhoutStaand","GrondvlakAandeelSs","DikDoodHoutStaand_ha")]
 
   #naamgeving conform databank indicatoren
 
-  structuurIndicatoren_LSVI3 <- plyr::rename(structuurIndicatoren_LSVI3, c(AantalFrequenteVegetatielagen ="frequenteVegetatielagen", AantalGroeiklassen = "groeiklassen", Groeiklasse7 = "groeiklasse7",Groeiklasse5_6_7 ="groeiklasse5_6_7" , VolumeAandeelDoodhoutTotaal = "volumeAandeelDoodHout", GrondvlakAandeelSs = "sleutelsoorten_boomlaag_grondvlakAandeel", DikDoodHoutStaand_ha = "dikDoodHoutStaand_ha"))
+  structuurIndicatoren_LSVI3 <- plyr::rename(structuurIndicatoren_LSVI3, c(AantalFrequenteVegetatielagen ="frequenteVegetatielagen", AantalGroeiklassen = "groeiklassen", Groeiklasse7 = "groeiklasse7",Groeiklasse5_6_7 ="groeiklasse5_6_7" , VolumeAandeelDoodhoutStaand = "volumeAandeelDoodHout", GrondvlakAandeelSs = "sleutelsoorten_boomlaag_grondvlakAandeel", DikDoodHoutStaand_ha = "dikDoodHoutStaand_ha"))
 
-structuurIndicatoren_LSVI3_long <- melt (structuurIndicatoren_LSVI3, id.vars = c("IDPlots","IDSegments","HabCode"), measure.vars = c("sleutelsoorten_boomlaag_grondvlakAandeel", "frequenteVegetatielagen","groeiklassen","groeiklasse7" ,"groeiklasse5_6_7", "volumeAandeelDoodHout","dikDoodHoutStaand_ha"), variable.name = "AnalyseVariabele", value.name = "Waarde")
+structuurIndicatoren_LSVI3_long <- gather(structuurIndicatoren_LSVI3, sleutelsoorten_boomlaag_grondvlakAandeel, frequenteVegetatielagen, groeiklassen, groeiklasse7 , groeiklasse5_6_7, volumeAandeelDoodHout, dikDoodHoutStaand_ha, key = "AnalyseVariabele", value = "Waarde")
 
 structuurIndicatoren_LSVI3_selectie <- merge(structuurIndicatoren_LSVI3_long, indicatorenLSVI[indicatorenLSVI$Meting == "structuurplot",], by = c("HabCode", "AnalyseVariabele"))
 
