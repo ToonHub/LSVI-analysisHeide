@@ -430,49 +430,7 @@ overzicht_indicatoren <- arrange(overzicht_indicatoren, Criterium)
 # DataIndicatoren <- indicatoren
 # HabCode <- "2310"
 
-plot_indicatoren <- function(DataIndicatoren, HabCode ){
-  
-p1 <- ggplot(DataIndicatoren[DataIndicatoren$HabCode == HabCode & DataIndicatoren$Criterium == "vegetatie",], aes(x = Waarde, y =  RangNr, colour = BeoordelingTekst)) + geom_point() + facet_grid(Criterium ~ AnalyseVariabele, scales = "free_x", labeller = labeller(AnalyseVariabele = label_wrap_gen(10)))+ labs(colour = "Beoordeling", y = "Meetpunt") + scale_colour_manual(values = colors_beoordeling) + theme(legend.position = "Hide", strip.text = element_text(size=8))
 
-p2 <-ggplot(DataIndicatoren[DataIndicatoren$HabCode == HabCode & DataIndicatoren$Criterium == "habitatstructuur",], aes(x = Waarde, y =  RangNr, colour = BeoordelingTekst)) + geom_point() + facet_grid(Criterium ~ AnalyseVariabele, scales = "free_x" , labeller = labeller(AnalyseVariabele = label_wrap_gen(10)))+ labs(colour = "Beoordeling", y = "Meetpunt") + scale_colour_manual(values = colors_beoordeling) + theme(legend.position = "Hide",  strip.text = element_text(size=8))
-
-p3 <- ggplot(DataIndicatoren[DataIndicatoren$HabCode == HabCode & DataIndicatoren$Criterium == "verstoring",], aes(x = Waarde, y =  RangNr, colour = BeoordelingTekst)) + geom_point() + facet_grid(Criterium ~ AnalyseVariabele, scales = "free_x" , labeller = labeller(AnalyseVariabele = label_wrap_gen(10)))+ labs(colour = "Beoordeling", y = "Meetpunt") + scale_colour_manual(values = colors_beoordeling) + theme(legend.position = "bottom",  strip.text = element_text(size=8))
-
-grid.arrange(p1,p2,p3)
-
-}
-
-
-
-
-plot_beoordeling <- function(DataIndicatoren, HabCode ){
-  
-p1 <- ggplot(indicatoren[indicatoren$HabCode == HabCode & indicatoren$Criterium == "vegetatie",], aes(x = BeoordelingTekst, fill = BeoordelingTekst)) + geom_bar() + facet_grid(Criterium ~ Indicator + AnalyseVariabele ) + labs(x = "Beoordeling" ,fill = "Beoordeling", title = paste("Beoordeling indicatoren habitattype ",HabCode))
-
-p2 <-ggplot(indicatoren[indicatoren$HabCode == HabCode & indicatoren$Criterium == "habitatstructuur",], aes(x = BeoordelingTekst, fill = BeoordelingTekst)) + geom_bar() + facet_grid(Criterium ~ AnalyseVariabele ) + labs(x = "Beoordeling" ,fill = "Beoordeling")
-
-p3 <- ggplot(indicatoren[indicatoren$HabCode == HabCode & indicatoren$Criterium == "verstoring",], aes(x = BeoordelingTekst, fill = BeoordelingTekst)) + geom_bar() + facet_grid(Criterium ~ AnalyseVariabele ) + labs(x = "Beoordeling" ,fill = "Beoordeling")
-
-grid.arrange(p1,p2,p3)
-
-  
-}
-
-plot_beoordeling2 <- function(DataIndicatoren, HabCode ){
-  
-p1 <- ggplot(indicatoren[indicatoren$HabCode == HabCode & indicatoren$Criterium == "vegetatie",], aes(x = AnalyseVariabele, fill = BeoordelingTekst)) + geom_bar() + facet_wrap(~ Criterium ) + labs(x = "Analysevariabele" ,fill = "Beoordeling", title = paste("Beoordeling indicatoren habitattype ",HabCode), y = "Aantal meetpunten") + coord_flip()
-#+ theme(axis.text.x = element_text(angle = 90, hjust = 1))
-
-p2 <-ggplot(indicatoren[indicatoren$HabCode == HabCode & indicatoren$Criterium == "habitatstructuur",], aes(x = AnalyseVariabele, fill = BeoordelingTekst)) + geom_bar() + facet_wrap(~ Criterium ) + labs(x = "AnalyseVariabele" ,fill = "Beoordeling", y = "Aantal meetpunten") + coord_flip()
-#+ theme(axis.text.x = element_text(angle = 90, hjust = 1))
-
-p3 <- ggplot(indicatoren[indicatoren$HabCode == HabCode & indicatoren$Criterium == "verstoring",], aes(x = AnalyseVariabele, fill = BeoordelingTekst)) + geom_bar() + facet_wrap(~ Criterium ) + labs(x = "AnalyseVariabele" ,fill = "Beoordeling", y = "Aantal meetpunten") + coord_flip()
-#+ theme(axis.text.x = element_text(angle = 90, hjust = 1)))
-
-grid.arrange(p1,p2,p3)
-
-  
-}
 ```
 
 In Bijlage geven we voor elk habitattype de beoordelingstabel voor LSVI-versie2 en LSVI-versie3. Drempelwaarden uitgedrukt in abundantieklassen werden vertaald naar percentages bedekking (NA TE KIJKEN!) zodat de indicatoren beoordeeld kunnen worden aan de hand van de ingezamelde gegevens. De waarden en beoordeling van de analysevariabelen voor de verschillende meetpunten worden ook weergegeven in Bijlage.  
